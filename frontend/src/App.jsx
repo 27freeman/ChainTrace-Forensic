@@ -69,6 +69,7 @@ export default function App() {
 
     const [viewMode, setViewMode] = useState('fund'); // 'fund' or 'simulate'
     const vmRef = useRef('fund');
+    const nodePositions = useRef({}); // Persist positions across scrubs
     useEffect(() => { vmRef.current = viewMode; }, [viewMode]);
 
     // ── build initial state object ──────────────────────────────────────────
@@ -193,6 +194,14 @@ export default function App() {
                 const spacing = role === 'thorchain' ? 85 : 42;
                 const yOffset = (idx % 2 === 0 ? 1 : -1) * Math.ceil(idx / 2) * spacing;
                 y = (H / 2) + yOffset + (role === 'attacker' ? 60 : 0);
+            }
+
+            // Restore saved position if it exists
+            if (nodePositions.current[key]) {
+                x = nodePositions.current[key].x;
+                y = nodePositions.current[key].y;
+            } else {
+                nodePositions.current[key] = { x, y };
             }
 
             const r = role === 'thorchain' ? 16 : 9;
@@ -466,26 +475,36 @@ export default function App() {
             const rect = canvas.getBoundingClientRect();
             const mx = (e.clientX - rect.left), my = (e.clientY - rect.top);
             if (S.current.draggingNode) {
-                S.current.draggingNode.x = mx; S.current.draggingNode.y = my;
+                const node = S.current.draggingNode;
+                const { dx, dy } = S.current.dragOffset || { dx: 0, dy: 0 };
+                node.x = mx + dx; node.y = my + dy;
+                nodePositions.current[node.addr.toLowerCase()] = { x: node.x, y: node.y };
                 S.current.hasDragged = true; return;
             }
             const isVisible = (n) => vmRef.current === 'fund' || n.activated;
             S.current.hoveredNode = Object.values(S.current.nodes)
                 .filter(isVisible)
-                .find(n => Math.sqrt((n.x - mx) ** 2 + (n.y - my) ** 2) <= n.r + 15) || null;
+                .find(n => Math.sqrt((n.x - mx) ** 2 + (n.y - my) ** 2) <= n.r + 20) || null;
             S.current.hoveredParticle = S.current.hoveredNode ? null : getHitParticle(mx, my);
             canvas.style.cursor = (S.current.hoveredNode || S.current.hoveredParticle) ? 'pointer' : 'default';
         }
 
         function onMouseDown(e) {
             if (!S.current) return;
+            // Ignore if clicking UI elements
+            if (e.target.closest('button') || e.target.closest('input') || e.target.closest('.info-panel')) return;
+
             const rect = canvas.getBoundingClientRect();
             const mx = e.clientX - rect.left, my = e.clientY - rect.top;
             const isVisible = (n) => vmRef.current === 'fund' || n.activated;
             const hit = Object.values(S.current.nodes)
                 .filter(isVisible)
-                .find(n => Math.sqrt((n.x - mx) ** 2 + (n.y - my) ** 2) <= n.r + 15);
-            if (hit) { S.current.draggingNode = hit; S.current.hasDragged = false; }
+                .find(n => Math.sqrt((n.x - mx) ** 2 + (n.y - my) ** 2) <= n.r + 20);
+            if (hit) {
+                S.current.draggingNode = hit;
+                S.current.dragOffset = { dx: hit.x - mx, dy: hit.y - my };
+                S.current.hasDragged = false;
+            }
         }
 
         function onMouseUp(e) {
@@ -515,12 +534,13 @@ export default function App() {
         }
 
         window.addEventListener('mousemove', onMouseMove);
-        canvas.addEventListener('mousedown', onMouseDown);
+        window.addEventListener('mousedown', onMouseDown);
         window.addEventListener('mouseup', onMouseUp);
 
         return () => {
             cancelAnimationFrame(rafRef.current); window.removeEventListener('resize', resize);
-            window.removeEventListener('mousemove', onMouseMove); canvas.removeEventListener('mousedown', onMouseDown);
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mousedown', onMouseDown);
             window.removeEventListener('mouseup', onMouseUp);
         };
     }, [makeState]);
@@ -619,7 +639,7 @@ export default function App() {
         <div style={{ width: '100vw', height: '100vh', background: '#0a0a0f', display: 'flex', flexDirection: 'column', fontFamily: 'monospace', overflow: 'hidden', position: 'fixed', top: 0, left: 0 }}>
             <style>{`body, html { margin: 0; padding: 0; overflow: hidden; user-select: none; }`}</style>
             <canvas ref={canvasRef} style={{ flex: 1, display: 'block', width: '100%', minHeight: 0 }} />
-            <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', flexDirection: 'column', gap: 14, pointerEvents: 'none' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     <div style={{ color: '#fff', fontSize: 14, fontWeight: 700, letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ color: '#e24b4a' }}>◈</span> KELP DAO EXPLOIT FUNDS FLOW
@@ -627,7 +647,7 @@ export default function App() {
                     <div style={{ color: '#444470', fontSize: 9, fontWeight: 600, letterSpacing: '0.02em' }}>NETWORK ASSET FLOW ANALYSIS</div>
                 </div>
 
-                <div style={{ display: 'flex', background: 'rgba(20,20,35,0.85)', border: '1px solid #2e2e5e', borderRadius: 6, padding: 3, width: 'fit-content', backdropFilter: 'blur(4px)' }}>
+                <div style={{ display: 'flex', background: 'rgba(20,20,35,0.85)', border: '1px solid #2e2e5e', borderRadius: 6, padding: 3, width: 'fit-content', backdropFilter: 'blur(4px)', pointerEvents: 'auto' }}>
                     <button
                         onClick={() => setViewMode('fund')}
                         style={{
