@@ -1,0 +1,13 @@
+services:
+  app:
+    build:
+      context: .
+      target: builder
+    ports:
+      - "3000:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/public
+    command: npm run dev -- --host 0.0.0.0
+    restart: unless-stopped
